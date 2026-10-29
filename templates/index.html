@@ -1,0 +1,323 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+
+    <title>Fake Review Detection</title>
+
+    <style>
+      * {
+        margin: 0;
+        padding: 0;
+        box-sizing: border-box;
+      }
+
+      body {
+        font-family: Arial, sans-serif;
+        background: #0b1020;
+        color: #f5f7ff;
+        min-height: 100vh;
+        padding: 40px 18px;
+      }
+
+      .container {
+        max-width: 1000px;
+        margin: auto;
+      }
+
+      /* Header */
+      .header {
+        text-align: center;
+        margin-bottom: 35px;
+      }
+
+      .header h1 {
+        font-size: clamp(28px, 5vw, 42px);
+        margin-bottom: 12px;
+      }
+
+      .header p {
+        color: #aab4cc;
+        line-height: 1.6;
+      }
+
+      /* Dashboard navigation */
+      .navigation {
+        display: flex;
+        justify-content: flex-end;
+        margin-bottom: 25px;
+      }
+
+      .dashboard-link {
+        display: inline-flex;
+        align-items: center;
+        gap: 9px;
+        padding: 12px 18px;
+        background: #202d49;
+        color: #c7d2fe;
+        border: 1px solid #5264a0;
+        border-radius: 10px;
+        text-decoration: none;
+        font-weight: bold;
+        font-size: 14px;
+        transition: all 0.2s ease;
+      }
+
+      .dashboard-link:hover {
+        background: #818cf8;
+        color: #101426;
+        border-color: #818cf8;
+        transform: translateY(-2px);
+      }
+
+      /* Main panel */
+      .panel {
+        background: #151d32;
+        border: 1px solid #293550;
+        border-radius: 16px;
+        padding: 24px;
+        margin-bottom: 24px;
+      }
+
+      label {
+        display: block;
+        margin-bottom: 12px;
+        font-weight: bold;
+      }
+
+      textarea {
+        width: 100%;
+        min-height: 150px;
+        padding: 15px;
+        border: 1px solid #3a4967;
+        border-radius: 10px;
+        background: #0d1426;
+        color: white;
+        font: inherit;
+        resize: vertical;
+        line-height: 1.6;
+      }
+
+      textarea:focus {
+        outline: 2px solid #818cf8;
+        border-color: transparent;
+      }
+
+      button {
+        margin-top: 16px;
+        padding: 13px 22px;
+        border: none;
+        border-radius: 9px;
+        background: #818cf8;
+        color: #101426;
+        font-weight: bold;
+        font-size: 15px;
+        cursor: pointer;
+        transition: background 0.2s ease;
+      }
+
+      button:hover {
+        background: #a5b4fc;
+      }
+
+      /* Prediction results */
+      .results {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 20px;
+      }
+
+      .model-card {
+        background: #151d32;
+        border: 1px solid #293550;
+        border-radius: 16px;
+        padding: 24px;
+        margin-bottom: 24px;
+        overflow-wrap: anywhere;
+      }
+
+      .model-card h2 {
+        margin-bottom: 18px;
+      }
+
+      .prediction {
+        font-size: 25px;
+        font-weight: bold;
+        margin: 12px 0;
+      }
+
+      .muted {
+        color: #aab4cc;
+        line-height: 1.6;
+      }
+
+      /* Comparison */
+      .comparison {
+        background: #151d32;
+        border: 1px solid #293550;
+        border-radius: 16px;
+        padding: 24px;
+        margin-top: 4px;
+      }
+
+      .comparison h2 {
+        margin-bottom: 12px;
+      }
+
+      .comparison p {
+        margin-bottom: 8px;
+      }
+
+      .error {
+        color: #fca5a5;
+        background: #351b2b;
+        border: 1px solid #713449;
+        padding: 12px;
+        border-radius: 8px;
+        margin-top: 14px;
+        line-height: 1.5;
+      }
+
+      /* Footer */
+      .footer {
+        color: #8e9bb6;
+        text-align: center;
+        margin-top: 28px;
+        font-size: 13px;
+        line-height: 1.6;
+      }
+
+      @media (max-width: 650px) {
+        .results {
+          grid-template-columns: 1fr;
+        }
+
+        body {
+          padding: 25px 12px;
+        }
+
+        .navigation {
+          justify-content: center;
+        }
+
+        .dashboard-link {
+          width: 100%;
+          justify-content: center;
+        }
+
+        .panel,
+        .model-card,
+        .comparison {
+          padding: 18px;
+        }
+      }
+    </style>
+  </head>
+
+  <body>
+    <main class="container">
+      <!-- Dashboard Navigation -->
+      <nav class="navigation">
+        <a href="{{ url_for('dashboard') }}" class="dashboard-link">
+          <span>📊</span>
+          <span>Evaluation Dashboard</span>
+          <span>→</span>
+        </a>
+      </nav>
+
+      <!-- Page Header -->
+      <header class="header">
+        <h1>Fake Review Detection</h1>
+        <p>Compare two machine learning models on the same review.</p>
+      </header>
+
+      <!-- Review Input -->
+      <section class="panel">
+        <form method="POST" action="{{ url_for('home') }}">
+          <label for="review">Enter product review</label>
+
+          <textarea
+            id="review"
+            name="review"
+            placeholder="Paste a product review here..."
+            required
+          >
+{{ review or '' }}</textarea
+          >
+
+          <button type="submit">Analyze Review</button>
+        </form>
+
+        {% if error %}
+        <p class="error">{{ error }}</p>
+        {% endif %}
+      </section>
+
+      <!-- Model Predictions -->
+      {% if lstm_result or distilbert_result %}
+
+      <section class="results">
+        <!-- LSTM -->
+        <article class="model-card">
+          <h2>LSTM</h2>
+
+          {% if lstm_result %}
+          <p class="muted">Prediction</p>
+
+          <p class="prediction">{{ lstm_result.label }}</p>
+
+          <p class="muted">Model confidence: {{ lstm_result.confidence }}%</p>
+          {% else %}
+          <p class="muted">Prediction is unavailable.</p>
+          {% endif %}
+        </article>
+
+        <!-- DistilBERT -->
+        <article class="model-card">
+          <h2>DistilBERT</h2>
+
+          {% if distilbert_result %}
+          <p class="muted">Prediction</p>
+
+          <p class="prediction">{{ distilbert_result.label }}</p>
+
+          <p class="muted">
+            Model confidence: {{ distilbert_result.confidence }}%
+          </p>
+          {% else %}
+          <p class="muted">Prediction is unavailable.</p>
+          {% endif %}
+        </article>
+      </section>
+
+      <!-- Model Comparison -->
+      {% if lstm_result and distilbert_result %}
+      <section class="comparison">
+        <h2>Model Comparison</h2>
+
+        {% if lstm_result.label == distilbert_result.label %}
+        <p>Both models agree on this review.</p>
+
+        <p class="muted">Both models predicted: {{ lstm_result.label }}</p>
+        {% else %}
+        <p>The models disagree on this review.</p>
+
+        <p class="muted">
+          LSTM: {{ lstm_result.label }} | DistilBERT: {{ distilbert_result.label
+          }}
+        </p>
+        {% endif %}
+      </section>
+      {% endif %} {% endif %}
+
+      <!-- Footer -->
+      <footer class="footer">
+        <p>
+          Predictions are model estimates, not proof that a review is fake.
+          Always interpret results with caution.
+        </p>
+      </footer>
+    </main>
+  </body>
+</html>

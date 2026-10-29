@@ -1,0 +1,547 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+<title>Fake Review Detection Dashboard</title>
+
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+<style>
+* {
+    box-sizing: border-box;
+}
+
+body {
+    margin: 0;
+    padding: 25px;
+    background: #0b1020;
+    color: #e5e7eb;
+    font-family: Arial, sans-serif;
+}
+
+main {
+    max-width: 1250px;
+    margin: auto;
+}
+
+h1 {
+    margin-bottom: 8px;
+}
+
+.muted {
+    color: #9ca3af;
+}
+
+a {
+    color: #7dd3fc;
+    text-decoration: none;
+}
+
+.cards {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+    gap: 15px;
+    margin: 25px 0;
+}
+
+.card, .panel {
+    background: #141c30;
+    border: 1px solid #29364d;
+    border-radius: 14px;
+    padding: 20px;
+    min-width: 0;
+}
+
+.card span {
+    color: #9ca3af;
+    font-size: 13px;
+}
+
+.card h2 {
+    font-size: 28px;
+    margin: 12px 0;
+}
+
+.green {
+    color: #4ade80;
+}
+
+.blue {
+    color: #7dd3fc;
+}
+
+.red {
+    color: #fb7185;
+}
+
+.charts {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 18px;
+}
+
+.chart-box {
+    height: 300px;
+    position: relative;
+}
+
+.panel {
+    margin-bottom: 18px;
+}
+
+.controls {
+    display: flex;
+    gap: 10px;
+    flex-wrap: wrap;
+    margin: 18px 0;
+}
+
+input, select {
+    background: #0b1020;
+    color: white;
+    border: 1px solid #374151;
+    border-radius: 8px;
+    padding: 12px;
+}
+
+input {
+    flex: 1;
+    min-width: 220px;
+}
+
+.table-wrap {
+    overflow: auto;
+    max-height: 520px;
+}
+
+table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 13px;
+}
+
+th, td {
+    padding: 12px;
+    text-align: left;
+    border-bottom: 1px solid #29364d;
+    vertical-align: top;
+}
+
+th {
+    position: sticky;
+    top: 0;
+    background: #1b2740;
+}
+
+.review {
+    min-width: 300px;
+    max-width: 500px;
+    overflow-wrap: anywhere;
+    line-height: 1.5;
+}
+
+.note {
+    margin-top: 25px;
+    font-size: 12px;
+    line-height: 1.6;
+    color: #9ca3af;
+}
+
+@media (max-width: 750px) {
+    body {
+        padding: 12px;
+    }
+
+    .charts {
+        grid-template-columns: 1fr;
+    }
+
+    .card, .panel {
+        padding: 14px;
+    }
+}
+</style>
+</head>
+
+<body>
+<main>
+
+<a href="/">← Back to Review Analyzer</a>
+
+<h1>Model Evaluation Dashboard</h1>
+<p class="muted">
+    Fake Review Detection · Test Dataset Analysis
+</p>
+
+<section class="cards">
+
+    <div class="card">
+        <span>Total Test Reviews</span>
+        <h2>{{ total }}</h2>
+    </div>
+
+    <div class="card">
+        <span>LSTM Accuracy</span>
+        <h2>{{ lstm.accuracy }}%</h2>
+    </div>
+
+    <div class="card">
+        <span>DistilBERT Accuracy</span>
+        <h2 class="green">{{ bert.accuracy }}%</h2>
+    </div>
+
+    <div class="card">
+        <span>Model Agreement</span>
+        <h2 class="blue">{{ agreement_pct }}%</h2>
+        <span>{{ agreement_count }} reviews</span>
+    </div>
+
+    <div class="card">
+        <span>Disagreements</span>
+        <h2 class="red">{{ disagreement_count }}</h2>
+    </div>
+
+    <div class="card">
+        <span>Reviews with Errors</span>
+        <h2>{{ error_count }}</h2>
+    </div>
+
+</section>
+
+<section class="charts">
+
+    <div class="panel">
+        <h3>Metrics Comparison</h3>
+        <div class="chart-box">
+            <canvas id="metricsChart"></canvas>
+        </div>
+    </div>
+
+    <div class="panel">
+        <h3>Model Agreement</h3>
+        <div class="chart-box">
+            <canvas id="agreementChart"></canvas>
+        </div>
+    </div>
+
+    <div class="panel">
+        <h3>LSTM Confusion Matrix</h3>
+        <div class="chart-box">
+            <canvas id="lstmChart"></canvas>
+        </div>
+        <p class="muted">Rows = actual; values show prediction counts.</p>
+    </div>
+
+    <div class="panel">
+        <h3>DistilBERT Confusion Matrix</h3>
+        <div class="chart-box">
+            <canvas id="bertChart"></canvas>
+        </div>
+        <p class="muted">Rows = actual; values show prediction counts.</p>
+    </div>
+
+</section>
+
+<section class="panel">
+
+    <h3>Explore Test Reviews</h3>
+
+    <p class="muted">
+        Search reviews or filter by prediction correctness.
+        The table loads the first 1,000 rows.
+    </p>
+
+    <div class="controls">
+
+        <input
+            id="search"
+            type="text"
+            placeholder="Search review text..."
+        >
+
+        <select id="filter">
+            <option value="all">All Reviews</option>
+            <option value="disagree">Models Disagree</option>
+            <option value="wrong">At Least One Model Wrong</option>
+            <option value="bothwrong">Both Models Wrong</option>
+            <option value="correct">Both Models Correct</option>
+        </select>
+
+        <select id="limit">
+            <option value="50">Show 50</option>
+            <option value="100">Show 100</option>
+            <option value="250">Show 250</option>
+            <option value="1000">Show 1000</option>
+        </select>
+
+    </div>
+
+    <p id="count" class="muted"></p>
+
+    <div class="table-wrap">
+        <table>
+            <thead>
+                <tr>
+                    <th>Review</th>
+                    <th>Actual</th>
+                    <th>LSTM</th>
+                    <th>DistilBERT</th>
+                    <th>Agreement</th>
+                </tr>
+            </thead>
+
+            <tbody id="rows"></tbody>
+        </table>
+    </div>
+
+</section>
+
+<p class="note">
+    These results measure agreement with the dataset's stored labels.
+    Confidence and agreement do not prove that a real-world review is genuine.
+</p>
+
+</main>
+
+<script>
+const records = {{ records | tojson }};
+const lstm = {{ lstm | tojson }};
+const bert = {{ bert | tojson }};
+const agreeCount = {{ agreement_count }};
+const disagreeCount = {{ disagreement_count }};
+
+Chart.defaults.color = "#cbd5e1";
+Chart.defaults.borderColor = "#29364d";
+
+// Metrics comparison chart
+new Chart(document.getElementById("metricsChart"), {
+    type: "bar",
+
+    data: {
+        labels: ["Accuracy", "Precision", "Recall", "F1-score"],
+
+        datasets: [
+            {
+                label: "LSTM (%)",
+                data: [
+                    lstm.accuracy,
+                    lstm.precision,
+                    lstm.recall,
+                    lstm.f1
+                ],
+                backgroundColor: "#60a5fa"
+            },
+            {
+                label: "DistilBERT (%)",
+                data: [
+                    bert.accuracy,
+                    bert.precision,
+                    bert.recall,
+                    bert.f1
+                ],
+                backgroundColor: "#4ade80"
+            }
+        ]
+    },
+
+    options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        scales: {
+            y: {
+                beginAtZero: true,
+                max: 100
+            }
+        }
+    }
+});
+
+// Confusion matrix count charts
+function createMatrixChart(elementId, matrix) {
+
+    new Chart(document.getElementById(elementId), {
+        type: "bar",
+
+        data: {
+            labels: [
+                "Fake → Fake",
+                "Fake → Original",
+                "Original → Fake",
+                "Original → Original"
+            ],
+
+            datasets: [{
+                label: "Review Count",
+
+                data: [
+                    matrix[0][0],
+                    matrix[0][1],
+                    matrix[1][0],
+                    matrix[1][1]
+                ],
+
+                backgroundColor: [
+                    "#4ade80",
+                    "#fb7185",
+                    "#fb7185",
+                    "#4ade80"
+                ]
+            }]
+        },
+
+        options: {
+            indexAxis: "y",
+            responsive: true,
+            maintainAspectRatio: false
+        }
+    });
+}
+
+createMatrixChart("lstmChart", lstm.matrix);
+createMatrixChart("bertChart", bert.matrix);
+
+// Agreement chart
+new Chart(document.getElementById("agreementChart"), {
+    type: "doughnut",
+
+    data: {
+        labels: ["Agree", "Disagree"],
+
+        datasets: [{
+            data: [agreeCount, disagreeCount],
+            backgroundColor: ["#4ade80", "#fb7185"]
+        }]
+    },
+
+    options: {
+        responsive: true,
+        maintainAspectRatio: false
+    }
+});
+
+// Interactive review table
+const tbody = document.getElementById("rows");
+const search = document.getElementById("search");
+const filter = document.getElementById("filter");
+const limit = document.getElementById("limit");
+const count = document.getElementById("count");
+
+function renderRows() {
+
+    const query = search.value.toLowerCase();
+    const mode = filter.value;
+
+    const matchingRows = records.filter(row => {
+
+        const text = String(
+            row.clean_text || row.text_ || ""
+        ).toLowerCase();
+
+        const actual = Number(row.actual_label_id);
+        const lstmPrediction = Number(row.lstm_prediction_id);
+        const bertPrediction = Number(row.distilbert_prediction_id);
+
+        const lstmWrong = lstmPrediction !== actual;
+        const bertWrong = bertPrediction !== actual;
+        const disagree = lstmPrediction !== bertPrediction;
+
+        if (query && !text.includes(query)) {
+            return false;
+        }
+
+        if (mode === "disagree" && !disagree) {
+            return false;
+        }
+
+        if (mode === "wrong" && !lstmWrong && !bertWrong) {
+            return false;
+        }
+
+        if (mode === "bothwrong" && !(lstmWrong && bertWrong)) {
+            return false;
+        }
+
+        if (mode === "correct" && (lstmWrong || bertWrong)) {
+            return false;
+        }
+
+        return true;
+    });
+
+    const visibleRows = matchingRows.slice(
+        0,
+        Number(limit.value)
+    );
+
+    count.textContent =
+        `Showing ${visibleRows.length} of ${matchingRows.length} matching rows in the loaded sample.`;
+
+    tbody.replaceChildren();
+
+    visibleRows.forEach(row => {
+
+        const actual = Number(row.actual_label_id);
+        const lstmPrediction = Number(row.lstm_prediction_id);
+        const bertPrediction = Number(row.distilbert_prediction_id);
+
+        const label = value =>
+            value === 1 ? "Original" : "Fake";
+
+        const cells = [
+            {
+                text: String(row.clean_text || row.text_ || ""),
+                className: "review"
+            },
+            {
+                text: label(actual),
+                className: ""
+            },
+            {
+                text: label(lstmPrediction),
+                className: lstmPrediction === actual ? "green" : "red"
+            },
+            {
+                text: label(bertPrediction),
+                className: bertPrediction === actual ? "green" : "red"
+            },
+            {
+                text: lstmPrediction === bertPrediction
+                    ? "Agree"
+                    : "Disagree",
+                className: lstmPrediction === bertPrediction
+                    ? "green"
+                    : "red"
+            }
+        ];
+
+        const tr = document.createElement("tr");
+
+        cells.forEach(cell => {
+            const td = document.createElement("td");
+
+            // textContent prevents review text from being interpreted as HTML.
+            td.textContent = cell.text;
+            td.className = cell.className;
+
+            if (cell.className === "red") {
+                td.style.color = "#fb7185";
+            }
+
+            tr.appendChild(td);
+        });
+
+        tbody.appendChild(tr);
+    });
+}
+
+[search, filter, limit].forEach(element => {
+    element.addEventListener("input", renderRows);
+});
+
+renderRows();
+</script>
+</body>
+</html>

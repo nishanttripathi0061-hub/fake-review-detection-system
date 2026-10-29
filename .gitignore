@@ -1,0 +1,39 @@
+# Python cache
+__pycache__/
+*.py[cod]
+*.pyo
+
+# Virtual environments
+venv/
+.venv/
+env/
+fake-review-env/
+
+# Environment variables and secrets
+.env
+.env.*
+!.env.example
+
+# VS Code settings
+.vscode/
+
+# Jupyter temporary files
+.ipynb_checkpoints/
+
+# Python logs
+*.log
+
+# Dataset CSV files
+data/*.csv
+
+# Trained LSTM models
+models/*.keras
+models/*.h5
+models/*.pkl
+
+# Trained DistilBERT model files
+models/distilbert-fake-review-model/
+
+# OS files
+.DS_Store
+Thumbs.db
