@@ -25,6 +25,7 @@ fake-review-env/
 
 # Dataset CSV files
 data/*.csv
+!data/test_predictions.csv
 
 # Trained LSTM models
 models/*.keras
