@@ -1,5 +1,5 @@
-
 from pathlib import Path
+import os
 import pickle
 
 import numpy as np
@@ -8,7 +8,9 @@ import torch
 import tensorflow as tf
 
 from flask import Flask, render_template, request
+from huggingface_hub import hf_hub_download, snapshot_download
 from transformers import AutoTokenizer, AutoModelForSequenceClassification
+
 from sklearn.metrics import (
     accuracy_score,
     precision_score,
@@ -24,28 +26,40 @@ from sklearn.metrics import (
 
 BASE_DIR = Path(__file__).resolve().parent
 
-LSTM_MODEL_PATH = BASE_DIR / "models" / "best_lstm_model.keras"
-LSTM_TOKENIZER_PATH = BASE_DIR / "models" / "lstm_tokenizer.pkl"
-DISTILBERT_DIR = BASE_DIR / "models" / "distilbert-fake-review-model"
+LSTM_REPO_ID = "nishant-works/fake-review-lstm"
+DISTILBERT_REPO_ID = "nishant-works/fake-review-distilbert"
+
 PREDICTIONS_PATH = BASE_DIR / "data" / "test_predictions.csv"
 
 app = Flask(__name__)
 
+# Deployment will use CPU
+device = torch.device("cpu")
+
+# Reduce unnecessary CPU thread usage
+torch.set_num_threads(2)
+
 
 # ==================================================
-# 2. LOAD LSTM MODEL
+# 2. DOWNLOAD AND LOAD LSTM MODEL
 # ==================================================
 
-print("\nLoading LSTM model...")
+print("\nDownloading LSTM model from Hugging Face...")
 
-if not LSTM_MODEL_PATH.exists():
-    raise FileNotFoundError(f"Missing: {LSTM_MODEL_PATH}")
+LSTM_MODEL_PATH = hf_hub_download(
+    repo_id=LSTM_REPO_ID,
+    filename="best_lstm_model.keras"
+)
 
-if not LSTM_TOKENIZER_PATH.exists():
-    raise FileNotFoundError(f"Missing: {LSTM_TOKENIZER_PATH}")
+LSTM_TOKENIZER_PATH = hf_hub_download(
+    repo_id=LSTM_REPO_ID,
+    filename="lstm_tokenizer.pkl"
+)
+
+print("Loading LSTM model...")
 
 lstm_model = tf.keras.models.load_model(
-    str(LSTM_MODEL_PATH),
+    LSTM_MODEL_PATH,
     compile=False
 )
 
@@ -56,31 +70,29 @@ print("LSTM loaded successfully!")
 
 
 # ==================================================
-# 3. LOAD DISTILBERT MODEL
+# 3. DOWNLOAD AND LOAD DISTILBERT MODEL
 # ==================================================
 
-device = torch.device(
-    "cuda" if torch.cuda.is_available() else "cpu"
+print("\nDownloading DistilBERT model from Hugging Face...")
+
+DISTILBERT_DIR = snapshot_download(
+    repo_id=DISTILBERT_REPO_ID
 )
 
-print("\nLoading DistilBERT model...")
-
-if not DISTILBERT_DIR.exists():
-    raise FileNotFoundError(f"Missing: {DISTILBERT_DIR}")
+print("Loading DistilBERT model...")
 
 distilbert_tokenizer = AutoTokenizer.from_pretrained(
-    str(DISTILBERT_DIR),
-    local_files_only=True
+    DISTILBERT_DIR
 )
 
 distilbert_model = AutoModelForSequenceClassification.from_pretrained(
-    str(DISTILBERT_DIR),
-    local_files_only=True
+    DISTILBERT_DIR
 ).to(device)
 
 distilbert_model.eval()
 
-print("DistilBERT loaded on:", device)
+print("DistilBERT loaded successfully!")
+print("Device:", device)
 
 
 # ==================================================
@@ -104,6 +116,7 @@ def predict_lstm(review):
     )
 
     label = "Original" if score >= 0.5 else "Fake"
+
     confidence = max(score, 1 - score) * 100
 
     return {
@@ -115,6 +128,7 @@ def predict_lstm(review):
 
 # ==================================================
 # 5. DISTILBERT PREDICTION
+# 0 = Fake, 1 = Original
 # ==================================================
 
 def predict_distilbert(review):
@@ -132,6 +146,7 @@ def predict_distilbert(review):
     }
 
     with torch.no_grad():
+
         outputs = distilbert_model(**inputs)
 
         probabilities = torch.softmax(
@@ -149,10 +164,13 @@ def predict_distilbert(review):
         probabilities[predicted_class].item()
     ) * 100
 
+    # Probability of Original class (class 1)
+    original_score = float(probabilities[1].item())
+
     return {
         "label": label,
         "confidence": round(confidence, 2),
-        "score": round(confidence / 100, 4)
+        "score": round(original_score, 4)
     }
 
 
@@ -174,11 +192,15 @@ def home():
         review = request.form.get("review", "").strip()
 
         if not review:
+
             error = "Please enter a review."
 
         else:
+
             try:
+
                 lstm_result = predict_lstm(review)
+
                 distilbert_result = predict_distilbert(review)
 
                 agreement = (
@@ -188,20 +210,25 @@ def home():
 
                 comparison = {
                     "agreement": agreement,
+
                     "message": (
                         "Both models predicted the same label."
                         if agreement
                         else "Models disagree. Review carefully."
                     ),
+
                     "label": (
                         lstm_result["label"]
-                        if agreement else None
+                        if agreement
+                        else None
                     )
                 }
 
             except Exception:
+
                 app.logger.exception("Prediction error")
-                error = "Prediction failed. Check terminal output."
+
+                error = "Prediction failed. Check server logs."
 
     return render_template(
         "index.html",
@@ -221,9 +248,10 @@ def home():
 def dashboard():
 
     if not PREDICTIONS_PATH.exists():
+
         return (
-            "Evaluation file not found. Run "
-            "'python evaluate_models.py' first.",
+            "Evaluation file not found. "
+            "Please ensure test_predictions.csv exists.",
             404
         )
 
@@ -236,15 +264,19 @@ def dashboard():
     ]
 
     for column in required_columns:
+
         if column not in df.columns:
+
             return (
                 f"Missing column: {column}. "
-                "Run evaluate_models.py again.",
+                "Check test_predictions.csv.",
                 400
             )
 
     y_true = df["actual_label_id"].astype(int).to_numpy()
+
     lstm_pred = df["lstm_prediction_id"].astype(int).to_numpy()
+
     bert_pred = df["distilbert_prediction_id"].astype(int).to_numpy()
 
     def calculate_metrics(actual, predicted):
@@ -253,21 +285,31 @@ def dashboard():
             "accuracy": round(
                 accuracy_score(actual, predicted) * 100, 2
             ),
+
             "precision": round(
                 precision_score(
-                    actual, predicted, zero_division=0
+                    actual,
+                    predicted,
+                    zero_division=0
                 ) * 100, 2
             ),
+
             "recall": round(
                 recall_score(
-                    actual, predicted, zero_division=0
+                    actual,
+                    predicted,
+                    zero_division=0
                 ) * 100, 2
             ),
+
             "f1": round(
                 f1_score(
-                    actual, predicted, zero_division=0
+                    actual,
+                    predicted,
+                    zero_division=0
                 ) * 100, 2
             ),
+
             "matrix": confusion_matrix(
                 actual,
                 predicted,
@@ -278,24 +320,33 @@ def dashboard():
     agree = lstm_pred == bert_pred
 
     df["actual_label"] = np.where(
-        y_true == 1, "Original", "Fake"
+        y_true == 1,
+        "Original",
+        "Fake"
     )
 
     df["lstm_prediction"] = np.where(
-        lstm_pred == 1, "Original", "Fake"
+        lstm_pred == 1,
+        "Original",
+        "Fake"
     )
 
     df["distilbert_prediction"] = np.where(
-        bert_pred == 1, "Original", "Fake"
+        bert_pred == 1,
+        "Original",
+        "Fake"
     )
 
     df["models_agree"] = agree
 
     error_count = int(
-        ((lstm_pred != y_true) | (bert_pred != y_true)).sum()
+        (
+            (lstm_pred != y_true)
+            | (bert_pred != y_true)
+        ).sum()
     )
 
-    # Dashboard table loads the first 1,000 rows.
+    # Dashboard table loads the first 1,000 rows
     records = (
         df.head(1000)
         .fillna("")
@@ -304,13 +355,23 @@ def dashboard():
 
     return render_template(
         "dashboard.html",
+
         total=len(df),
+
         agreement_count=int(agree.sum()),
+
         disagreement_count=int((~agree).sum()),
-        agreement_pct=round(float(agree.mean() * 100), 2),
+
+        agreement_pct=round(
+            float(agree.mean() * 100), 2
+        ),
+
         error_count=error_count,
+
         lstm=calculate_metrics(y_true, lstm_pred),
+
         bert=calculate_metrics(y_true, bert_pred),
+
         records=records
     )
 
@@ -322,11 +383,9 @@ def dashboard():
 if __name__ == "__main__":
 
     print("\nFake Review Detection System")
-    print("Review Analyzer: http://127.0.0.1:5000")
-    print("Evaluation Dashboard: http://127.0.0.1:5000/dashboard")
 
     app.run(
-        host="127.0.0.1",
-        port=5000,
+        host="0.0.0.0",
+        port=int(os.environ.get("PORT", 5000)),
         debug=False
     )
