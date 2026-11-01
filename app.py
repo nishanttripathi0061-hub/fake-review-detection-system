@@ -1,14 +1,15 @@
-
 from pathlib import Path
 import os
 import pickle
 
 import numpy as np
 import pandas as pd
+import torch
 import tensorflow as tf
 
 from flask import Flask, render_template, request
-from huggingface_hub import hf_hub_download
+from huggingface_hub import hf_hub_download, snapshot_download
+from transformers import AutoTokenizer, AutoModelForSequenceClassification
 
 from sklearn.metrics import (
     accuracy_score,
@@ -26,10 +27,17 @@ from sklearn.metrics import (
 BASE_DIR = Path(__file__).resolve().parent
 
 LSTM_REPO_ID = "nishant-works/fake-review-lstm"
+DISTILBERT_REPO_ID = "nishant-works/fake-review-distilbert"
 
 PREDICTIONS_PATH = BASE_DIR / "data" / "test_predictions.csv"
 
 app = Flask(__name__)
+
+# Deployment will use CPU
+device = torch.device("cpu")
+
+# Reduce unnecessary CPU thread usage
+torch.set_num_threads(2)
 
 
 # ==================================================
@@ -62,7 +70,33 @@ print("LSTM loaded successfully!")
 
 
 # ==================================================
-# 3. LSTM PREDICTION
+# 3. DOWNLOAD AND LOAD DISTILBERT MODEL
+# ==================================================
+
+print("\nDownloading DistilBERT model from Hugging Face...")
+
+DISTILBERT_DIR = snapshot_download(
+    repo_id=DISTILBERT_REPO_ID
+)
+
+print("Loading DistilBERT model...")
+
+distilbert_tokenizer = AutoTokenizer.from_pretrained(
+    DISTILBERT_DIR
+)
+
+distilbert_model = AutoModelForSequenceClassification.from_pretrained(
+    DISTILBERT_DIR
+).to(device)
+
+distilbert_model.eval()
+
+print("DistilBERT loaded successfully!")
+print("Device:", device)
+
+
+# ==================================================
+# 4. LSTM PREDICTION
 # 0 = Fake, 1 = Original
 # ==================================================
 
@@ -93,7 +127,55 @@ def predict_lstm(review):
 
 
 # ==================================================
-# 4. HOME PAGE
+# 5. DISTILBERT PREDICTION
+# 0 = Fake, 1 = Original
+# ==================================================
+
+def predict_distilbert(review):
+
+    inputs = distilbert_tokenizer(
+        review,
+        return_tensors="pt",
+        truncation=True,
+        max_length=256
+    )
+
+    inputs = {
+        key: value.to(device)
+        for key, value in inputs.items()
+    }
+
+    with torch.no_grad():
+
+        outputs = distilbert_model(**inputs)
+
+        probabilities = torch.softmax(
+            outputs.logits,
+            dim=1
+        )[0]
+
+        predicted_class = int(
+            torch.argmax(probabilities).item()
+        )
+
+    label = "Original" if predicted_class == 1 else "Fake"
+
+    confidence = float(
+        probabilities[predicted_class].item()
+    ) * 100
+
+    # Probability of Original class (class 1)
+    original_score = float(probabilities[1].item())
+
+    return {
+        "label": label,
+        "confidence": round(confidence, 2),
+        "score": round(original_score, 4)
+    }
+
+
+# ==================================================
+# 6. HOME PAGE: REVIEW ANALYZER
 # ==================================================
 
 @app.route("/", methods=["GET", "POST"])
@@ -101,6 +183,8 @@ def home():
 
     review = ""
     lstm_result = None
+    distilbert_result = None
+    comparison = None
     error = None
 
     if request.method == "POST":
@@ -108,35 +192,63 @@ def home():
         review = request.form.get("review", "").strip()
 
         if not review:
+
             error = "Please enter a review."
 
         else:
+
             try:
+
                 lstm_result = predict_lstm(review)
 
+                distilbert_result = predict_distilbert(review)
+
+                agreement = (
+                    lstm_result["label"]
+                    == distilbert_result["label"]
+                )
+
+                comparison = {
+                    "agreement": agreement,
+
+                    "message": (
+                        "Both models predicted the same label."
+                        if agreement
+                        else "Models disagree. Review carefully."
+                    ),
+
+                    "label": (
+                        lstm_result["label"]
+                        if agreement
+                        else None
+                    )
+                }
+
             except Exception:
+
                 app.logger.exception("Prediction error")
+
                 error = "Prediction failed. Check server logs."
 
     return render_template(
         "index.html",
         review=review,
         lstm_result=lstm_result,
-        distilbert_result=None,
-        comparison=None,
+        distilbert_result=distilbert_result,
+        comparison=comparison,
         error=error
     )
 
 
 # ==================================================
-# 5. EVALUATION DASHBOARD
-# Historical results from test_predictions.csv
+# 7. EVALUATION DASHBOARD
 # ==================================================
 
 @app.route("/dashboard")
 def dashboard():
 
     if not PREDICTIONS_PATH.exists():
+
         return (
             "Evaluation file not found. "
             "Please ensure test_predictions.csv exists.",
@@ -152,7 +264,9 @@ def dashboard():
     ]
 
     for column in required_columns:
+
         if column not in df.columns:
+
             return (
                 f"Missing column: {column}. "
                 "Check test_predictions.csv.",
@@ -232,6 +346,7 @@ def dashboard():
         ).sum()
     )
 
+    # Dashboard table loads the first 1,000 rows
     records = (
         df.head(1000)
         .fillna("")
@@ -262,12 +377,12 @@ def dashboard():
 
 
 # ==================================================
-# 6. START FLASK SERVER
+# 8. START FLASK SERVER
 # ==================================================
 
 if __name__ == "__main__":
 
-    print("\nFake Review Detection System - LSTM")
+    print("\nFake Review Detection System")
 
     app.run(
         host="0.0.0.0",
