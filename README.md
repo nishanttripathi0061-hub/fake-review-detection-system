@@ -1,393 +1,346 @@
 # Fake Review Detection System
 
-A machine-learning web application that classifies product reviews as
-**Fake** or **Original** using two models: **LSTM** and **DistilBERT**.
-The project includes a Flask review analyzer and an interactive
-evaluation dashboard.
+A machine-learning-based web application that classifies product reviews as **Fake (Computer Generated)** or **Original** using two deep-learning models: **LSTM** and **DistilBERT**.
 
-> **Caution:** Model predictions are estimates, not proof that a
-> real-world review is fake or genuine.
+The project includes a live Streamlit application, a Flask-based local application, and an interactive model evaluation dashboard.
+
+> **Caution:** Model predictions are estimates, not proof that a real-world review is fake or genuine.
+
+## Live Demo
+
+**Streamlit Application:**  
+https://fake-review-detection-system-vwmy8h9a2sfhccdcfzxeva.streamlit.app/
 
 ## Table of Contents
 
--   [Overview](#overview)
--   [Objectives](#objectives)
--   [Technology Stack](#technology-stack)
--   [Workflow](#workflow)
--   [Dataset and Labels](#dataset-and-labels)
--   [Models and Inference](#models-and-inference)
--   [Evaluation Results](#evaluation-results)
--   [Confusion Matrices](#confusion-matrices)
--   [Model Agreement](#model-agreement)
--   [Web Application](#web-application)
--   [Project Structure](#project-structure)
--   [Setup and Run](#setup-and-run)
--   [Evaluation Predictions](#evaluation-predictions)
--   [Limitations](#limitations)
--   [Future Improvements](#future-improvements)
+- Overview
+- Features
+- Technology Stack
+- Dataset and Labels
+- Project Workflow
+- Models and Architecture
+- Model Evaluation Results
+- Confusion Matrices
+- Model Agreement
+- Web Applications
+- Project Structure
+- Installation and Setup
+- Limitations
+- Future Improvements
 
 ## Overview
 
-The system compares two text-classification approaches on product
-reviews: 1. **LSTM (Long Short-Term Memory):** a recurrent neural
-network. 2. **DistilBERT:** a transformer-based sequence-classification
-model.
+The system compares two text-classification approaches:
 
-Users can submit a review to the Flask web app and see both model
-predictions. The evaluation dashboard visualizes aggregate metrics,
-agreement, confusion-matrix counts, and individual test examples.
+1. **LSTM (Long Short-Term Memory):** A recurrent neural network for sequential text processing.
+2. **DistilBERT:** A transformer-based sequence-classification model.
 
-## Objectives
+Users can submit a product review and receive predictions from both models. The project also provides an evaluation dashboard for comparing model performance, confusion matrices, prediction agreement, and individual test examples.
 
--   Build a binary fake-review classifier.
--   Train/evaluate LSTM and DistilBERT models.
--   Compare models on a held-out test set.
--   Provide a simple web interface for single-review inference.
--   Provide interactive charts and searchable test-prediction rows.
--   Save models locally for inference.
+## Features
+
+- Fake and Original review classification.
+- Dual-model prediction using LSTM and DistilBERT.
+- Prediction confidence display.
+- Model agreement and disagreement detection.
+- Interactive evaluation dashboard.
+- Accuracy, precision, recall, and F1-score comparison.
+- Confusion matrix visualization.
+- Searchable test prediction records.
+- Streamlit-based deployed application.
+- Flask-based local web application.
 
 ## Technology Stack
 
-  Technology                  Use
-  --------------------------- -------------------------------------------
-  Python                      Main language
-  TensorFlow / Keras          LSTM inference
-  PyTorch                     DistilBERT inference
-  Hugging Face Transformers   DistilBERT tokenizer/model
-  Pandas                      CSV data handling
-  NumPy                       Numerical operations
-  scikit-learn                Evaluation metrics and confusion matrices
-  Flask                       Web server and routes
-  HTML / CSS                  Page structure and styling
-  JavaScript                  Search, filters, charts
-  Chart.js                    Dashboard charts
-  VS Code / PowerShell        Development environment
-
-### Reported environment
-
-Virtual environment: `D:\\fake-review-env`\
-Project directory: `D:\\fake review detection system`
-
-The package list reported during development included Flask 3.1.3,
-TensorFlow 2.21.0, PyTorch 2.11.0+cu128, Transformers 5.21.0, Pandas
-3.1.0, NumPy 2.5.4, and scikit-learn 1.9.1. Versions can change; verify
-compatibility when recreating the environment.
-
-## Workflow
-
-1.  Load the raw review dataset.
-2.  Split data into training, validation, and test sets with a reported
-    stratified split of 70% / 15% / 15%.
-3.  Prepare review text for model input.
-4.  Train/evaluate the LSTM model and save its model/tokenizer.
-5.  Train/evaluate or load the locally saved DistilBERT
-    sequence-classification model.
-6.  Run both models on the held-out test set.
-7.  Save predictions to `data/test_predictions.csv`.
-8.  Serve the analyzer and dashboard through Flask.
+| Technology | Purpose |
+|---|---|
+| Python | Main programming language |
+| TensorFlow / Keras | LSTM model |
+| PyTorch | DistilBERT inference |
+| Hugging Face Transformers | Transformer model and tokenizer |
+| Pandas | Data handling |
+| NumPy | Numerical operations |
+| Scikit-learn | Evaluation metrics |
+| Streamlit | Deployed web application |
+| Flask | Local web application |
+| HTML / CSS | Frontend structure and styling |
+| JavaScript | Frontend interactions |
+| Chart.js | Dashboard charts |
 
 ## Dataset and Labels
 
-  Item                         Details
-  ---------------------------- -------------------------------------
-  Raw dataset                  `data/fake reviews dataset.csv`
-  Training set                 `data/train.csv`
-  Validation set               `data/validation.csv`
-  Test set                     `data/test.csv`
-  Evaluation output            `data/test_predictions.csv`
-  Reported full dataset size   Approximately 40,432 rows
-  Reported test size           6,059 reviews
-  Fake label                   `CG`, numeric ID `0`
-  Original label               `OR`, numeric ID `1`
-  Split                        70% train, 15% validation, 15% test
-  Strategy                     Stratified split
+| Item | Details |
+|---|---|
+| Raw dataset | `data/fake reviews dataset.csv` |
+| Training set | `data/train.csv` |
+| Validation set | `data/validation.csv` |
+| Test set | `data/test.csv` |
+| Evaluation output | `data/test_predictions.csv` |
+| Dataset size | Approximately 40,432 reviews |
+| Test set size | 6,059 reviews |
+| Fake label | CG (0) |
+| Original label | OR (1) |
+| Split | 70% / 15% / 15% |
+| Strategy | Stratified split |
 
-The evaluation script reportedly selects `clean_text` if available,
-otherwise `text_`. Confirm the exact cleaning steps in the current
-notebook/script before claiming specific preprocessing details.
+The evaluation script reportedly selects `clean_text` if available; otherwise, it uses `text_`.
 
-## Models and Inference
+## Project Workflow
 
-### LSTM
+1. Load the raw review dataset.
+2. Analyze and preprocess the review text.
+3. Split the dataset into training, validation, and test sets.
+4. Train and evaluate the LSTM model.
+5. Train/evaluate or load the saved DistilBERT model.
+6. Run both models on the held-out test set.
+7. Save predictions in `data/test_predictions.csv`.
+8. Compare model performance.
+9. Integrate model inference into the web applications.
 
--   Saved model: `models/best_lstm_model.keras`
--   Saved tokenizer: `models/lstm_tokenizer.pkl`
--   Framework: TensorFlow/Keras
--   Input length: 250 tokens
--   Padding/truncation: post-padding and post-truncation
--   Sigmoid score is interpreted as class 1 = Original.
--   Threshold: score \>= 0.5 predicts Original; otherwise Fake.
--   Displayed confidence is the larger of the score and its complement.
+## Models and Architecture
 
-### DistilBERT
+### 1. LSTM
 
--   Local model directory: `models/distilbert-fake-review-model/`
--   Framework: PyTorch and Hugging Face Transformers
--   Maximum token length: 256
--   Class mapping: 0 = Fake, 1 = Original
--   Uses softmax probabilities and selects the highest-probability
-    class.
--   Device selection: CUDA when available, otherwise CPU.
+- Framework: TensorFlow / Keras
+- Saved model: `models/best_lstm_model.keras`
+- Saved tokenizer: `models/lstm_tokenizer.pkl`
+- Input sequence length: 250 tokens
+- Padding and truncation: Post-padding and post-truncation
+- Output: Sigmoid score
+- Class mapping: 0 = Fake, 1 = Original
+- Threshold: 0.5
 
-### Comparing predictions
+### 2. DistilBERT
 
-The web app sends the review to both models. Matching labels produce an
-agreement message; different labels produce a disagreement warning.
+- Framework: PyTorch
+- Library: Hugging Face Transformers
+- Model directory: `models/distilbert-fake-review-model/`
+- Maximum token length: 256
+- Class mapping: 0 = Fake, 1 = Original
+- Output: Softmax probabilities
+- Device: CUDA when available, otherwise CPU
+
+### Prediction Comparison
+
+Both models analyze the submitted review.
+
+- Matching predictions produce an agreement message.
+- Different predictions produce a disagreement warning.
+
 Agreement does not guarantee correctness.
 
-## Evaluation Results
+## Model Evaluation Results
 
 Reported results on the held-out test set of **6,059 reviews**:
 
-  Metric                      LSTM   DistilBERT         DistilBERT − LSTM
-  ----------------------- -------- ------------ -------------------------
-  Accuracy                  93.46%       97.95%   +4.49 percentage points
-  Precision                 93.33%       99.06%   +5.73 percentage points
-  Recall                    93.63%       96.83%   +3.20 percentage points
-  F1-score                  93.48%       97.93%   +4.45 percentage points
-  Correct predictions        5,663        5,935                      +272
-  Incorrect predictions        396          124                      −272
+| Metric | LSTM | DistilBERT |
+|---|---:|---:|
+| Accuracy | 93.46% | 97.95% |
+| Precision | 93.33% | 99.06% |
+| Recall | 93.63% | 96.83% |
+| F1-score | 93.48% | 97.93% |
+| Correct predictions | 5,663 | 5,935 |
+| Incorrect predictions | 396 | 124 |
 
-**Result:** DistilBERT outperformed LSTM on the reported aggregate
-metrics, with 272 more correct predictions and 272 fewer incorrect
-predictions on this test set.
+**Result:** DistilBERT outperformed LSTM on the reported aggregate metrics, producing 272 more correct predictions and 272 fewer incorrect predictions.
 
-### Metric interpretation caveat
-
-Accuracy is the fraction of all examples predicted correctly. Precision,
-recall, and F1 depend on the evaluation code's `average` and `pos_label`
-settings. The recorded values are reproduced from the reported
-evaluation. With the mapping above, class `1` is Original; check
-`evaluate_models.py` before describing precision/recall/F1 as
-specifically Fake-class metrics.
+*Note: Precision, recall, and F1-score depend on the evaluation code's averaging and positive-label settings.*
 
 ## Confusion Matrices
 
-Rows are actual labels and columns are predicted labels. Class order:
-Fake (0), Original (1).
+Class order: Fake (0), Original (1). Rows represent actual labels and columns represent predicted labels.
 
 ### LSTM
 
-  Actual  Predicted     Fake (0)   Original (1)
-  ------------------- ---------- --------------
-  Fake (0)                 2,824            203
-  Original (1)               193          2,839
+| Actual / Predicted | Fake (0) | Original (1) |
+|---|---:|---:|
+| Fake (0) | 2,824 | 203 |
+| Original (1) | 193 | 2,839 |
 
--   Correct: 2,824 + 2,839 = **5,663**
--   Incorrect: 203 + 193 = **396**
+- Correct predictions: 5,663
+- Incorrect predictions: 396
 
 ### DistilBERT
 
-  Actual  Predicted     Fake (0)   Original (1)
-  ------------------- ---------- --------------
-  Fake (0)                 2,999             28
-  Original (1)                96          2,936
+| Actual / Predicted | Fake (0) | Original (1) |
+|---|---:|---:|
+| Fake (0) | 2,999 | 28 |
+| Original (1) | 96 | 2,936 |
 
--   Correct: 2,999 + 2,936 = **5,935**
--   Incorrect: 28 + 96 = **124**
-
-DistilBERT made fewer errors in both off-diagonal categories on this
-test set: - Fake predicted as Original: 28 vs. 203 for LSTM. - Original
-predicted as Fake: 96 vs. 193 for LSTM.
+- Correct predictions: 5,935
+- Incorrect predictions: 124
 
 ## Model Agreement
 
-  Measure                      Result
-  ------------------- ---------------
-  Both models agree     5,647 reviews
-  Agreement rate               93.20%
-  Models disagree         412 reviews
-  Disagreement rate             6.80%
+| Measure | Result |
+|---|---:|
+| Both models agree | 5,647 reviews |
+| Agreement rate | 93.20% |
+| Models disagree | 412 reviews |
+| Disagreement rate | 6.80% |
 
-Agreement is computed by comparing `lstm_prediction_id` with
-`distilbert_prediction_id`. It does not establish that either prediction
-is correct.
+Agreement is calculated by comparing `lstm_prediction_id` with `distilbert_prediction_id`.
 
-## Web Application
+## Web Applications
 
-### Review Analyzer
+### 1. Streamlit Application — Primary Deployment
 
-Local URL: `http://127.0.0.1:5000/`
+**Live URL:**  
+https://fake-review-detection-system-vwmy8h9a2sfhccdcfzxeva.streamlit.app/
 
-Features: - Enter/paste a review. - See LSTM prediction and
-confidence. - See DistilBERT prediction and confidence. - See whether
-the two models agree.
+The Streamlit application is the primary deployed interface for review predictions and model evaluation.
 
-### Evaluation Dashboard
+### 2. Flask Application — Local Version
 
-Local URL: `http://127.0.0.1:5000/dashboard`
+The Flask application provides:
 
-Features: - Test-set count and accuracy cards. - Metrics comparison
-chart. - Agreement/disagreement doughnut chart. - Confusion-matrix count
-charts. - Searchable review table. - Filters for disagreement, at least
-one wrong prediction, both wrong, and both correct. - Visible-row limit
-controls.
+- Review analyzer at `/`
+- Evaluation dashboard at `/dashboard`
+- LSTM and DistilBERT predictions
+- Prediction confidence
+- Model agreement information
+- Metrics and confusion matrix visualizations
+- Searchable test prediction records
 
-The current dashboard table loads up to the first **1,000 rows** for
-browser-side filtering, while aggregate metrics are calculated from the
-full CSV. Chart.js is loaded from a CDN and therefore needs internet
-access unless hosted locally.
+Local URLs:
+
+- Analyzer: `http://127.0.0.1:5000/`
+- Dashboard: `http://127.0.0.1:5000/dashboard`
 
 ## Project Structure
 
-Core structure used during development:
-
-``` text
+```text
 fake review detection system/
+│
 ├── app.py
 ├── evaluate_models.py
+├── requirements.txt
+│
+├── streamlit_deploy/
+│   ├── streamlit_app.py
+│   └── requirements.txt
+│
 ├── data/
 │   ├── fake reviews dataset.csv
 │   ├── train.csv
 │   ├── validation.csv
 │   ├── test.csv
 │   └── test_predictions.csv
+│
 ├── models/
 │   ├── best_lstm_model.keras
 │   ├── lstm_tokenizer.pkl
 │   └── distilbert-fake-review-model/
+│
 ├── notebooks/
 │   ├── 01_data_analysis.ipynb
 │   ├── 02_data_preprocessing.ipynb
 │   ├── 03_lstm_model.ipynb
 │   ├── 04_distilbert_model.ipynb
 │   └── 05_model_comparison.ipynb
+│
 └── templates/
     ├── index.html
     └── dashboard.html
 ```
 
-The frontend was also being reorganized into `frontend/html`,
-`frontend/css`, and `frontend/js`. If that change is completed, update
-this tree and configure Flask to use those template/static paths. Flask
-defaults to `templates/` and `static/`; moving files without
-configuration can break the routes and assets.
+*This is the core project structure; update it if additional frontend or deployment files are added.*
 
-## Setup and Run
+## Installation and Setup
 
-Open the project folder in VS Code, then open **Terminal → New
-Terminal**.
+### Prerequisites
 
-``` powershell
-cd "D:\\fake review detection system"
-& "D:\\fake-review-env\\Scripts\\Activate.ps1"
+- Python
+- Git
+- VS Code (recommended)
+
+### 1. Clone the repository
+
+```bash
+git clone https://github.com/nishanttripathi0061-hub/fake-review-detection-system.git
+
+cd fake-review-detection-system
+```
+
+### 2. Run the Streamlit Application
+
+Install the deployment dependencies:
+
+```bash
+python -m pip install -r streamlit_deploy/requirements.txt
+```
+
+Run the application:
+
+```bash
+streamlit run streamlit_deploy/streamlit_app.py
+```
+
+### 3. Run the Flask Application
+
+Activate the Flask environment and install the root requirements if needed.
+
+```powershell
+& "D:\fake-review-env\Scripts\Activate.ps1"
+
 python app.py
 ```
 
-Keep the terminal open while the server runs. Open: - Analyzer:
-`http://127.0.0.1:5000/` - Dashboard: `http://127.0.0.1:5000/dashboard`
+Open:
 
-Stop the server with `Ctrl + C`. The `127.0.0.1` address is local to the
-machine running Flask, not a public deployment link.
+- `http://127.0.0.1:5000/`
+- `http://127.0.0.1:5000/dashboard`
 
-### Check/install dependencies
+Keep the terminal open while the Flask server is running. Stop it using `Ctrl + C`.
 
-``` powershell
-python -m pip list
-python -m pip freeze > requirements.txt
-```
+### Evaluation Predictions
 
-Only if required packages are missing:
+The Flask dashboard requires:
 
-``` powershell
-python -m pip install flask pandas numpy scikit-learn tensorflow torch transformers
-```
+`data/test_predictions.csv`
 
-Avoid changing working package versions without checking compatibility.
+If the file is missing, run:
 
-## Evaluation Predictions
-
-The dashboard requires `data/test_predictions.csv`. If it is missing,
-run this command from the activated environment and project root:
-
-``` powershell
+```powershell
 python evaluate_models.py
 ```
 
-The output was reported to contain columns such as: -
-`actual_label_id` - `lstm_prediction_id` - `distilbert_prediction_id` -
-`models_agree` - `lstm_prediction` - `distilbert_prediction` -
-`actual_label`
-
-The review table looks for review text in `clean_text` or `text_`.
-Confirm the actual CSV column names if the text column appears blank.
-
 ## Limitations
 
--   Text-only predictions may miss contextual or behavioral signals.
--   Dataset labels may contain noise.
--   Test performance does not guarantee performance on new platforms,
-    products, languages, or future reviews.
--   Confidence values may not be calibrated probabilities.
--   Agreement does not prove correctness.
--   The dashboard table currently samples up to 1,000 rows.
--   Live inference and evaluation should use identical preprocessing;
-    the evaluation script may use cleaned text while live inference may
-    receive raw text.
--   Metrics depend on the metric configuration in `evaluate_models.py`.
+- Text-only predictions may miss contextual or behavioral signals.
+- Dataset labels may contain noise.
+- Test performance does not guarantee performance on unseen platforms or future reviews.
+- Confidence values may not be calibrated probabilities.
+- Agreement between models does not prove correctness.
+- Evaluation metrics depend on the metric configuration.
+- Live inference and evaluation should use identical preprocessing.
 
 ## Future Improvements
 
--   Document Python version and pin compatible package versions.
--   Align preprocessing between evaluation and live inference.
--   Verify positive-label settings for precision, recall, and F1.
--   Add per-class and macro/weighted metrics.
--   Add ROC-AUC and precision-recall curves where appropriate.
--   Use a 2×2 heatmap for confusion matrices.
--   Add pagination or server-side filtering for all test rows.
--   Add automated tests for preprocessing, model loading, routes, and
-    dashboard data.
--   Add loading states and robust inference error handling.
--   Host Chart.js locally for offline use.
--   Evaluate on an external dataset and consider deployment behind a
-    production server.
-
-## Troubleshooting
-
-### Pylance says `Import "torch" could not be resolved`
-
-Select the correct interpreter in VS Code: 1. Press `Ctrl + Shift + P`.
-2. Choose **Python: Select Interpreter**. 3. Select
-`D:\\fake-review-env\\Scripts\\python.exe`. 4. Reload the VS Code window
-if needed.
-
-Verify the import:
-
-``` powershell
-& "D:\\fake-review-env\\Scripts\\python.exe" -c "import torch; print(torch.__version__)"
-```
-
-### `ModuleNotFoundError`
-
-Activate the correct environment, then install only the missing package:
-
-``` powershell
-python -m pip install PACKAGE_NAME
-```
-
-### Dashboard says the CSV is missing
-
-Run `python evaluate_models.py` from the project root and check
-`data/test_predictions.csv`.
-
-### Port 5000 is already in use
-
-Stop the previous Flask process with `Ctrl + C`, then run
-`python app.py` again.
-
-### Charts are blank
-
-Check internet connectivity because Chart.js is loaded from a CDN.
-Inspect the browser console for JavaScript errors.
+- Align preprocessing between training, evaluation, and live inference.
+- Verify positive-label settings for evaluation metrics.
+- Add per-class, macro, and weighted metrics.
+- Add ROC-AUC and precision-recall curves.
+- Improve dashboard filtering and pagination.
+- Add automated tests for preprocessing and inference.
+- Improve error handling and loading states.
+- Evaluate models on external review datasets.
+- Improve deployment scalability.
 
 ## Results Summary
 
-On the reported test set of 6,059 reviews: - **LSTM accuracy:** 93.46% -
-**DistilBERT accuracy:** 97.95% - **LSTM correct predictions:** 5,663 -
-**DistilBERT correct predictions:** 5,935 - **Agreement:** 5,647 reviews
-(93.20%) - **Disagreement:** 412 reviews (6.80%)
+On the reported test set of 6,059 reviews:
 
-DistilBERT was the stronger model in the reported comparison. Before
-submitting or publishing this project, rerun the current evaluation
-script and verify the scores, metric settings, file paths, and final
-frontend folder structure against the actual code.
+- **LSTM Accuracy:** 93.46%
+- **DistilBERT Accuracy:** 97.95%
+- **LSTM Correct Predictions:** 5,663
+- **DistilBERT Correct Predictions:** 5,935
+- **Model Agreement:** 93.20%
+
+DistilBERT achieved stronger results than LSTM in the reported evaluation.
+
+---
+
+**Project:** Fake Review Detection System  
+**Live Application:** https://fake-review-detection-system-vwmy8h9a2sfhccdcfzxeva.streamlit.app/  
+**Repository:** https://github.com/nishanttripathi0061-hub/fake-review-detection-system
