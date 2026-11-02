@@ -415,11 +415,14 @@ def predict_lstm(review, model, tokenizer):
 def predict_distilbert(review, tokenizer, model):
 
     inputs = tokenizer(
-        review,
-        return_tensors="pt",
-        truncation=True,
-        max_length=256,
-    )
+    review,
+    return_tensors="pt",
+    truncation=True,
+    max_length=256,
+)
+
+# DistilBERT does not use token_type_ids
+    inputs.pop("token_type_ids", None)
 
     with torch.no_grad():
 
